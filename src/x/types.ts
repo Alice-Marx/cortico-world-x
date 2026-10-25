@@ -35,25 +35,41 @@ const X_ERROR_MESSAGES: Record<XErrorCode, string> = {
  * logged out, x.com navigates here and the resulting page has no testids and no visible text, so
  * looking for buttons or the word "log in" alone misses it.
  */
-const LOGIN_URL_PATTERNS: RegExp[] = [
-  /\/i\/flow\/login(?:[/?#]|$)/,
-  /\/i\/jf\/onboarding/,
-  /[?&]mode=login\b/,
-  /[?&]redirect_after_login=/,
+const LOGIN_URL_PATTERNS: { label: string; re: RegExp }[] = [
+  { label: '/i/flow/login', re: /\/i\/flow\/login(?:[/?#]|$)/ },
+  { label: '/i/jf/onboarding', re: /\/i\/jf\/onboarding/ },
+  { label: '?mode=login', re: /[?&]mode=login\b/ },
+  { label: '?redirect_after_login=', re: /[?&]redirect_after_login=/ },
 ];
 
+/** Which of our own patterns matched, or null. The label is our text, never the page's. */
+export function loginUrlMatch(href: string): string | null {
+  if (typeof href !== 'string' || !href) return null;
+  for (const pattern of LOGIN_URL_PATTERNS) {
+    if (pattern.re.test(href)) return pattern.label;
+  }
+  return null;
+}
+
 export function isLoginUrl(href: string): boolean {
-  if (typeof href !== 'string' || !href) return false;
-  return LOGIN_URL_PATTERNS.some((pattern) => pattern.test(href));
+  return loginUrlMatch(href) !== null;
 }
 
 export class XError extends Error {
   readonly code: XErrorCode;
+  /**
+   * Diagnostics for logs only: this may hold text the page (a third party) wrote.
+   * Nothing in this package renders detail into an event or a tool receipt - keep it out of
+   * anything with origin 'internal' (TAGS.md:81, injection-risk).
+   */
+  detail?: string;
 
-  constructor(code: XErrorCode, message?: string) {
+  constructor(code: XErrorCode, message?: string, detail?: string) {
     super(message && message.trim() ? message.trim() : X_ERROR_MESSAGES[code]);
     this.name = 'XError';
     this.code = code;
+    const cleaned = typeof detail === 'string' ? detail.trim() : '';
+    if (cleaned) this.detail = cleaned;
   }
 }
 
@@ -196,7 +212,7 @@ export async function readSource(
   const scrolls = clampInt(o.scrolls, DEFAULT_SCROLLS, 0, MAX_SCROLLS);
   const settle = o.settleMs === undefined ? DEFAULT_SETTLE_MS : clampInt(o.settleMs, DEFAULT_SETTLE_MS, 0, 15_000);
   const url = sourceUrl(s);
-  if (!url) throw new XError('parse-failed', 'unrecognised source: ' + formatSource(s));
+  if (!url) throw new XError('parse-failed', 'unrecognised source', formatSource(s));
 
   const page = await engine.newPage('about:blank');
   const collected: XPost[] = [];
@@ -286,7 +302,7 @@ async function extractPage(engine: BrowserEngine, page: Parameters<BrowserEngine
   try {
     value = await engine.evaluate<unknown>(page, EXTRACT_JS);
   } catch (err) {
-    throw new XError('parse-failed', 'page extraction failed: ' + errorText(err));
+    throw new XError('parse-failed', 'page extraction failed', errorText(err));
   }
   const env = toEnvelope(value);
   if (!env) {
@@ -302,13 +318,18 @@ function classify(
 ): void {
   if (env.state.articles === 0) {
     if (env.state.rateLimited) {
-      throw new XError('ratelimited', env.state.text || 'x.com returned a rate-limit page for ' + url);
+      throw new XError('ratelimited', 'x.com returned a rate-limit page at ' + url, env.state.text);
     }
-    if (isLoginUrl(env.state.href)) {
-      throw new XError('login-required', 'x.com redirected to its login flow: ' + env.state.href);
+    const loginMatch = loginUrlMatch(env.state.href);
+    if (loginMatch) {
+      throw new XError(
+        'login-required',
+        'x.com redirected to its login flow (matched ' + loginMatch + ') at ' + url,
+        env.state.href,
+      );
     }
     if (env.state.loginWall) {
-      throw new XError('login-required', env.state.text || 'x.com asked for a login at ' + url);
+      throw new XError('login-required', 'x.com asked for a login at ' + url, env.state.text);
     }
     if (env.state.text.trim() === '' && env.state.htmlLength > 1000) {
       throw new XError(
@@ -316,11 +337,12 @@ function classify(
         '页面没有渲染出可见内容（' +
           env.state.htmlLength +
           ' 字符 DOM 但没有可见文本）：可能是后台标签页被浏览器节流，或 X 的前端没加载出来 at ' +
-          (env.state.href || url),
+          url,
+        env.state.href,
       );
     }
     if (nav && nav.ok === false) {
-      throw new XError('parse-failed', 'navigation to ' + url + ' did not finish: ' + (nav.note ?? 'timeout'));
+      throw new XError('parse-failed', 'navigation to ' + url + ' did not finish', nav.note ?? 'timeout');
     }
     return;
   }

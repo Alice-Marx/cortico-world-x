@@ -67,9 +67,11 @@ test('readSource throws login-required on a sign-in wall and still closes the ta
   const { engine, calls } = makeFakeEngine({ rounds: [fixture('x-login-wall.html')] });
   await assert.rejects(
     () => readSource(engine, source('home'), { settleMs: 0 }),
-    (err: { code?: string; message?: string }) => {
+    (err: { code?: string; message?: string; detail?: string }) => {
       assert.equal(err.code, 'login-required');
-      assert.match(String(err.message), /Sign in to X/);
+      assert.doesNotMatch(String(err.message), /Sign in to X/, 'page copy must not ride in the receipt');
+      assert.match(String(err.message), /https:\/\/x\.com\/home/);
+      assert.match(String(err.detail), /Sign in to X/, 'log-only detail keeps it');
       return true;
     },
   );
@@ -80,9 +82,11 @@ test('readSource throws ratelimited on rate-limit copy', async () => {
   const { engine } = makeFakeEngine({ rounds: [fixture('x-ratelimit.html')] });
   await assert.rejects(
     () => readSource(engine, source('user:alpha'), { settleMs: 0 }),
-    (err: { code?: string; message?: string }) => {
+    (err: { code?: string; message?: string; detail?: string }) => {
       assert.equal(err.code, 'ratelimited');
-      assert.match(String(err.message), /Rate limit exceeded/);
+      assert.doesNotMatch(String(err.message), /Rate limit exceeded/);
+      assert.match(String(err.message), /rate-limit page at https:\/\/x\.com/);
+      assert.match(String(err.detail), /Rate limit exceeded/);
       return true;
     },
   );
@@ -100,9 +104,11 @@ test('readSource reports a navigation failure as parse-failed', async () => {
   );
   await assert.rejects(
     () => readSource(engine, source('home'), { settleMs: 0 }),
-    (err: { code?: string; message?: string }) => {
+    (err: { code?: string; message?: string; detail?: string }) => {
       assert.equal(err.code, 'parse-failed');
-      assert.match(String(err.message), /ERR_INTERNET_DISCONNECTED/);
+      assert.doesNotMatch(String(err.message), /ERR_INTERNET_DISCONNECTED/);
+      assert.match(String(err.message), /did not finish/);
+      assert.match(String(err.detail), /ERR_INTERNET_DISCONNECTED/);
       return true;
     },
   );
@@ -144,9 +150,11 @@ test('readSource maps an evaluate rejection to parse-failed', async () => {
   };
   await assert.rejects(
     () => readSource(broken, source('home'), { settleMs: 0 }),
-    (err: { code?: string; message?: string }) => {
+    (err: { code?: string; message?: string; detail?: string }) => {
       assert.equal(err.code, 'parse-failed');
-      assert.match(String(err.message), /Target closed/);
+      assert.doesNotMatch(String(err.message), /Target closed/);
+      assert.equal(err.message, 'page extraction failed');
+      assert.match(String(err.detail), /Target closed/);
       return true;
     },
   );
@@ -225,9 +233,10 @@ test('readSource turns new rate-limit copy into ratelimited', async () => {
     const { engine } = makeFakeEngine({ rounds: [html] });
     await assert.rejects(
       () => readSource(engine, source('home'), { settleMs: 0 }),
-      (err: { code?: string; message?: string }) => {
+      (err: { code?: string; message?: string; detail?: string }) => {
         assert.equal(err.code, 'ratelimited', 'copy: ' + html);
-        assert.match(String(err.message), /Something went wrong|daily limit|已达上限/);
+        assert.doesNotMatch(String(err.message), /Something went wrong|daily limit|已达上限/);
+        assert.match(String(err.detail), /Something went wrong|daily limit|已达上限/);
         return true;
       },
     );
@@ -269,10 +278,11 @@ test('readSource: a logged-out redirect to the login flow is login-required (URL
   });
   await assert.rejects(
     () => readSource(engine, source('home'), { settleMs: 0 }),
-    (err: { code?: string; message?: string }) => {
+    (err: { code?: string; message?: string; detail?: string }) => {
       assert.equal(err.code, 'login-required');
-      assert.match(String(err.message), /i\/jf\/onboarding/, 'the receipt must name the URL it landed on');
-      assert.match(String(err.message), /redirect_after_login/);
+      assert.match(String(err.message), /i\/jf\/onboarding/, 'the matched pattern is our own text');
+      assert.doesNotMatch(String(err.message), /redirect_after_login/, 'the landed url is page-reported');
+      assert.equal(err.detail, REAL_ONBOARDING_HREF);
       return true;
     },
   );

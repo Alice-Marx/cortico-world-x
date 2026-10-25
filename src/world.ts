@@ -33,7 +33,7 @@ import type {
   WorldWebUiDecl,
 } from 'cortico/core/types.ts';
 import { WORLD_ID, sourceLines, xFeedConfigGroups, type XFeedConfigSection } from './config.ts';
-import { MODEL, strings, TEXT } from './i18n.ts';
+import { MODEL, strings } from './i18n.ts';
 import { CdpError, createEngine, type BrowserEngine, type BrowserStatus, type EngineOptions } from './cdp/types.ts';
 import { XError, formatSource, parseSource, readPost, readSource, type XPost } from './x/index.ts';
 import {
@@ -85,6 +85,37 @@ export const COLD_START_DELAY_MS = 60_000;
 /** 等登录态的重试间隔与次数上限（约 30 分钟）。 */
 export const LOGIN_RETRY_MS = 60_000;
 export const LOGIN_RETRY_MAX = 30;
+
+/**
+ * 掉线原因的白名单：把错误折成我们自己写的一句话。
+ * 绝不返回 error.message —— 那可能是页面原文（第三方），而调用方是 internal 事件。
+ */
+function downReason(error: unknown): string {
+  if (error instanceof XError) {
+    return error.code === 'login-required' ? 'X 要你登录' : '页面没打开';
+  }
+  if (error instanceof CdpError) {
+    switch (error.code) {
+      case 'no-browser':
+      case 'no-port':
+        return '连不上浏览器';
+      case 'not-connected':
+      case 'ws-failed':
+        return '浏览器没连上';
+      case 'timeout':
+      case 'cdp-failed':
+        return '命令没回话';
+      case 'page-failed':
+        return '页面没打开';
+    }
+  }
+  return '浏览器报错';
+}
+
+/** 源行 → 种类名（固定词汇表），scanned 事件只说种类与计数，绝不说源里的值。 */
+function sourceKindName(line: string): string {
+  return parseSource(line)?.kind ?? '未知源';
+}
 
 /** 控制字符（含换行、制表、U+2028/2029）：任何一个都足以把一行源顶成两行。 */
 const CONTROL_CHARS = /[\u0000-\u001f\u007f\u2028\u2029]/;
@@ -564,6 +595,12 @@ export class XWorld implements World {
           outcome.skipped += stored.skipped;
         } catch (error) {
           outcome.failures.push({ line, error });
+          // 页面原文（如果有）只写日志：日志不是模型通道，internal 事件与回执都不碰它。
+          const detail = (error as { detail?: unknown } | null)?.detail;
+          this.warn(
+            '读源失败（' + line + '）：' + errorText(error)
+              + (typeof detail === 'string' && detail !== '' ? ' ／页面原文：' + detail : ''),
+          );
         }
       }
 
@@ -886,6 +923,7 @@ export class XWorld implements World {
         if (this.loginRetries >= LOGIN_RETRY_MAX) {
           this.waitingLogin = false;
           this.loginRetries = 0;
+          // 同样只用固定模板 + 我们自己的配置数字。
           await this.emit(
             'x-feed.down',
             'X 还没登录，我不会再自动重试了。'
@@ -956,6 +994,7 @@ export class XWorld implements World {
     const after = Number.isFinite(minutes) && minutes > 0
       ? '登录成功之后窗口会自动收回屏幕外，之后每 ' + String(minutes) + ' 分钟自动看一次。'
       : '登录成功之后窗口会自动收回屏幕外（自动扫描现在是关着的，登录好叫我手动读一次）。';
+    // 固定模板 + 我们自己的配置数字：这是 internal 事件。
     await this.emit(
       'x-feed.down',
       '需要你登录 X 一次：浏览器窗口已经弹出来了，请在弹出的 Chrome 里登录（只需一次），登录完再叫我。' + after,
@@ -974,18 +1013,28 @@ export class XWorld implements World {
 
   // ——— 事件 ———
 
+  /** ready 的正文是写死的一句话（MODEL.status.ready）：internal 事件不许有任何第三方文本。 */
   private async markReady(): Promise<void> {
     this.down = false;
     await this.emit('x-feed.ready', MODEL.status.ready);
   }
 
+  /**
+   * 掉线通知。
+   *
+   * ★ 这里只许拼固定模板 + 我们自己写的分类句：这是 internal 事件，而 error.message 可能是
+   *   XError 从页面上抄下来的原文（第三方）。第三方文本进 internal 就是注入风险（TAGS.md:81），
+   *   所以原因一律走 downReason() 的白名单，原文只进日志和工具回执。
+   */
   private async markDown(error: unknown, where: string): Promise<void> {
     const first = !this.down;
     this.down = true;
     if (!first) return;
+    const when = where === 'start' ? '启动时' : '连接时';
     await this.emit(
       'x-feed.down',
-      TEXT.events.down.zh + '（' + where + '：' + errorText(error) + '）',
+      '浏览器没能用起来（' + when + '：' + downReason(error) + '）。'
+        + '工具会按失败回报，World 不消失；具体原因看工具回执或 data/logs/core.log。',
     );
   }
 
@@ -995,14 +1044,19 @@ export class XWorld implements World {
       const text = digest(outcome.added, { maxChars: clampInt(this.opts.cfg.digestMaxChars, 1200, 200, 8000) });
       if (text.trim() !== '') {
         const deliver = this.opts.cfg.deliverDigest !== false;
+        // 全包唯一允许带第三方正文的通道：origin 必须是 external（internal 只放固定模板）。
         await this.emit('x-feed.posts', text, { origin: 'external', deliver, trigger: 'debounce' });
         outcome.delivered = deliver;
       }
     }
-    const parts = outcome.perSource.map((one) => one.line + ' ' + String(one.read) + ' 条/新增 ' + String(one.added));
-    const failed = outcome.failures.map((one) => one.line + '（失败）');
+    // scanned 也是 internal：正文只放我们自己的计数与「源种类」（固定词汇表）。
+    // 源行里的值（search 关键词等）可能是第三方内容，一个字都不许进来。
+    const parts = outcome.perSource.map(
+      (one) => sourceKindName(one.line) + ' ' + String(one.read) + ' 条/新增 ' + String(one.added),
+    );
+    if (outcome.failures.length > 0) parts.push('失败 ' + String(outcome.failures.length) + ' 个源');
     const head = '新增 ' + String(outcome.added.length) + ' 条，跳过 ' + String(outcome.skipped) + ' 条。';
-    await this.emit('x-feed.scanned', head + (parts.length ? ' ' + parts.concat(failed).join('；') : ''), {
+    await this.emit('x-feed.scanned', head + (parts.length ? ' ' + parts.join('；') : ''), {
       deliver: false,
     });
   }

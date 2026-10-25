@@ -83,13 +83,27 @@ test('cortico.tags：只用 TAGS.md 词表里的标签（REPORT 第 9 条）', (
   for (const tag of tags) assert.ok(TAGS_VOCABULARY.includes(tag), '词表外的标签：' + tag);
   assert.ok(tags.includes('internet'), '读网上内容（TAGS.md:50）');
   assert.ok(tags.includes('browser'), '我们开页、滚动、读页，browser 是实话（TAGS.md:51）');
-  assert.ok(tags.includes('injection-risk'), '第三方文本会进对话（TAGS.md:81）');
-  assert.deepEqual([...tags].sort(), ['browser', 'injection-risk', 'internet'], '定稿的三个标签');
+  assert.deepEqual([...tags].sort(), ['browser', 'internet'], '定稿的两个标签');
+
+  // 撤掉的和不该加的，都别顺手加回来：
   assert.ok(!tags.includes('requires-key'), '本包不要任何第三方 API key');
   assert.ok(!tags.includes('unofficial-api'), '驱动浏览器不是调非官方接口；红标声明过就摘不掉');
+  assert.ok(
+    !tags.includes('injection-risk'),
+    '第三方文本走 origin external（x-feed.posts），不进 origin internal 事件；' +
+      '而带警示标签的包不能被认证（Pal-AI-Lab/cortico-extensions#202）',
+  );
   for (const reserved of ['coopanion', 'corti', 'pal-ai-world']) {
     assert.ok(!tags.includes(reserved), '官方蓝标作者不能声明（TAGS.md:34）');
   }
+
+  // 市场标签只写在 package.json 的 cortico.tags 里；describe.json 不能另立一份
+  const describe = JSON.parse(readFileSync(join(ROOT, pkg.cortico.describe), 'utf8'));
+  assert.equal(describe.tags, undefined, 'describe.json 不该有市场标签字段');
+  assert.ok(
+    !JSON.stringify(describe).includes('injection-risk'),
+    'describe.json 里也不该出现已撤掉的注入风险标签',
+  );
 });
 
 test('cortico.locales：只认 zh / en，只许 displayName / description（manifest.ts:42-55）', () => {

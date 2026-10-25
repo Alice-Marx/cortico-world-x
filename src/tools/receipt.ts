@@ -114,6 +114,8 @@ export function failureText(error: unknown, what: string, mode?: 'own' | 'attach
   const kind = classifyFailure(error);
   const label = FAILURE_LABEL[kind];
   const lines = ['[失败 · ' + label + '] ' + what];
+  // 工具回执不是内部通知，可以带诊断；但 XError.detail 是页面原文，回执里一律不渲染它，
+  // 只走进 world.ts 的日志（warn）——回执会被模型读进上下文，页面原文没必要跟着进去。
   const detail = oneLine(errorText(error));
   if (detail) lines.push('发生了什么：' + detail);
   const hint = error instanceof CdpError ? oneLine(String(error.hint ?? '')) : '';
@@ -122,6 +124,7 @@ export function failureText(error: unknown, what: string, mode?: 'own' | 'attach
   return lines.join('\n');
 }
 
+/** 只取 message：XError.detail（页面原文）不走这里（见 failureText 的注释）。 */
 export function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error ?? '');
