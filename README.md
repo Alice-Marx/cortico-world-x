@@ -7,7 +7,7 @@
 
 ## 当前状态
 
-0.1.0 已在 Coopanion 上**跑通**，不是骨架：
+已在 Coopanion 上**跑通**（0.1.x），不是骨架：
 
 - **7 个工具**直接可用：`x_look`（现在去看）、`x_read`（读单条）、`x_recall`（查知识库）、
   `x_sync_now`（按配置整轮扫）、`x_watch`（加/删源）、`x_status`（状态）、`x_export`（导出记忆包）。
