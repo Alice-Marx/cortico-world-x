@@ -102,6 +102,19 @@ post:https://x.com/handle/status/1234567890123456789
 
 只声明不推、或推了没声明，框架都不会拦：前者记日志并在 World 页标出，后者照常生效。
 
+## 标签与注入面（透明记录）
+
+扩展市场给本包挂过 `injection-risk`（警示/红色）。这个标记**成立过**，值得写清楚：
+
+- **0.1.1 及更早**：`XError.message` 会携带 X 页面原文，而 `markDown()` 把它拼进了 `x-feed.down`
+  ——一个 `origin: 'internal'` 的事件。也就是说，第三方写的字以"内部通知"的形态进了对话。
+- **0.1.2 起已堵**：页面原文移入 `XError.detail`（只进日志，事件与回执都不渲染）；
+  `x-feed.down` 只用固定分类白名单 `downReason()`；`x-feed.scanned` 只说源种类与计数。
+  第三方正文只走 `origin: 'external'` 的 `x-feed.posts` 这一条通道。
+- 回归测试用 canary 钉死：`tests/world.events.test.ts`（页面原文一旦出现在任一 internal 事件里即失败）
+  与 `tests/x.injection.test.ts`（十处 XError 构造点的 message 都不许借页面文本）。
+- 市场侧的粘住名单需官方撤销：见 [Pal-AI-Lab/cortico-extensions#274](https://github.com/Pal-AI-Lab/cortico-extensions/issues/274)。
+
 ## 已知限制
 
 - **引用推不单独抽**：嵌套在别人帖子里的 quote 正文会被忽略（顶层正文仍在）。
