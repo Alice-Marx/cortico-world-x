@@ -1,0 +1,46 @@
+# NOTICE
+
+许可信息分三层写：本包自己的 MIT、参照过的上游实现、测试夹具的来源。三方不是一回事，别混着读。
+
+## 1. 本包
+
+cortico-world-x
+Copyright (c) 2026 Alice-Marx
+
+以 MIT 许可发布，许可全文见同目录的 LICENSE 文件。
+package.json 的 license 字段是 MIT，指的就是那一份。
+
+## 2. 参照的上游实现（不是本包的一部分）
+
+设计参照 cortico-world-browser（MIT，Copyright (c) 2026 Phantivia，
+https://github.com/biliye/cortico-world-browser）。参照的是它的**实现结构**：
+
+- WorldDefinition 的字段与顺序；
+- start() 永不抛错，把连接失败变成 x-feed.down 事件丢给工具去报；
+- 工具回执按 5 类分失败（连不上浏览器 / 浏览器没连上 / 命令没回话 / 页面没打开 / 浏览器报错）；
+- 用 src/ENV_PROMPT.md 充当模型看的唯一入口环境说明；
+- ConfigGroup 的 owner 与 worlds.<id>.* 键前缀写法；
+- describe.json 与代码两份都被维护，再由 describe:extension 比对。
+
+本包没有复制它的代码，运行时不依赖它，也不与它共用进程状态：CDP 引擎（src/cdp）与 X 站点适配（src/x）
+是本包自己写的。上面这份上游版权与许可声明按 MIT 的要求在此保留。
+
+## 3. 测试夹具
+
+tests/fixtures/x-real-profile-2026-10.html 是从公开的 x.com 页面抓取的公开内容，仅用于解析器回归测试。
+
+它只含未登录就能看到的公开页面结构与帖子文字，不含登录态、私信、通讯录或任何非公开数据；
+页面上的文字与图片版权归原发布者与 X Corp.，这个文件只在测试里当解析样本用，不随 npm 包分发
+（package.json 的 files 不含 tests/）。
+
+## 4. 第三方代码
+
+无。全部实现只使用 Node 内建模块（node:fs、node:child_process、node:net、node:url、node:path 等），
+不引入任何第三方依赖，也不随包分发别人的代码——这也是本包不跑 pnpm install 的原因。
+Phase 2 之后若引入任何第三方代码，必须同步更新本节、上一节的说明与 package.json 的 dependencies。
+
+## 5. 商标与立场
+
+X 与 Twitter 是 X Corp. 的商标。本包不是 X Corp. 的产品，未获其认可或授权，
+也不提供它没有对外提供的接口：它只是在本机的浏览器里读操作者本来就看得见的页面，只读，
+不新建账号、不点赞、不转发、不关注、不私信。抓取节奏由操作者配置，默认 120 分钟一轮。

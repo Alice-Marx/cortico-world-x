@@ -1,0 +1,67 @@
+{
+  "name": "cortico-world-x",
+  "version": "0.1.0",
+  "description": "Cortico World: X 时间线 —— 借本机浏览器只读 X 的公开内容，读到的每条落进本地知识库，摘要进对话，必要时导出成记忆包。不登录新账号、不点赞转发关注私信。零第三方依赖。",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alice-Marx/cortico-world-x.git"
+  },
+  "homepage": "https://github.com/Alice-Marx/cortico-world-x#readme",
+  "bugs": {
+    "url": "https://github.com/Alice-Marx/cortico-world-x/issues"
+  },
+  "keywords": [
+    "cortico-world",
+    "cortico",
+    "coopanion",
+    "x",
+    "twitter",
+    "timeline",
+    "browser",
+    "knowledge-base"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "cortico": {
+    "kind": "world",
+    "api": 6,
+    "displayName": "X 时间线",
+    "icon": "assets/icon.svg",
+    "describe": "describe.json",
+    "tags": [
+      "internet",
+      "browser",
+      "injection-risk"
+    ],
+    "locales": {
+      "zh": {
+        "displayName": "X 时间线",
+        "description": "她能看 X：主时间线、某人的帖子、搜索、列表、话题。读到的东西落进本地知识库（Markdown + JSONL，人读可审计），按配置投摘要进对话，需要时导出成记忆包。用本机 Chromium 的调试口只读，不新建账号、不点赞转发关注私信。"
+      },
+      "en": {
+        "displayName": "X Timeline",
+        "description": "She reads X: the home timeline, one person's posts, search, lists and hashtags. What she reads lands in a local knowledge base (Markdown + JSONL, auditable by a human), digests go into the conversation, and the base exports as a memory bundle. Read-only through the local Chromium debugging port: no new account, no likes, reposts, follows or DMs."
+      }
+    }
+  },
+  "files": [
+    "src/",
+    "assets/",
+    "scripts/",
+    "docs/",
+    "describe.json",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  }
+}

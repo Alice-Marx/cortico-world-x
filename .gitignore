@@ -1,0 +1,22 @@
+# 依赖与构建产物
+node_modules/
+coverage/
+dist/
+*.tgz
+*.tmp
+*.log
+.DS_Store
+.env
+
+# 运行时产物：在包目录里试跑一次就会落这些，一律不进版本库
+browser-profile/
+export-*.json
+index.jsonl
+state.json
+sources.local.json
+login-done
+meta.json
+*.bad-*
+
+# 内部工作契约：含本机路径与分工记录，只在本地保留，不入库；对外的说明在 README.md 与 docs/
+PLAN.md
