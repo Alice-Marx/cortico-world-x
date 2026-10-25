@@ -7,15 +7,21 @@
 
 ## 当前状态
 
-- **Phase 1（本包现状）**：包能被 Coopanion 装上并激活。定义、11 项配置、环境说明、
-  4 个事件的自描述都已就位；`tools()` 现在返回空表，World 实例是可用的桩，
-  `start()` 只记下宿主、永不抛错。
-- **Phase 2（进行中）**：`src/cdp`（裸 WebSocket 的 CDP 引擎）、`src/x`（站点适配）、
-  `src/learn`（知识库）、`src/tools` 7 个工具、`src/world.ts` 真身。
-  `src/world.ts` 顶部的 `[W5-1]`…`[W5-4]` 就是填充锚点。
+0.1.0 已在 Coopanion 上**跑通**，不是骨架：
 
-所以现在装上之后：World 页有配置表单、导航有状态灯、时间线会在激活时安静地什么都不推。
-模型侧暂时拿不到 X 工具（`src/ENV_PROMPT.md` 里提到的那几个工具是 Phase 2 才落地的）。
+- **7 个工具**直接可用：`x_look`（现在去看）、`x_read`（读单条）、`x_recall`（查知识库）、
+  `x_sync_now`（按配置整轮扫）、`x_watch`（加/删源）、`x_status`（状态）、`x_export`（导出记忆包）。
+  模型怎么用它们写在 `src/ENV_PROMPT.md`（会进系统前缀）。
+- 浏览器引擎（`src/cdp`，裸 WebSocket 的 CDP）、站点适配（`src/x`）、知识库（`src/learn`）都是完整实现。
+- **实测**：本机读到 17 条真实帖子并落库，第二轮扫描 `added=0`（去重生效）；真 Chrome 冒烟 31 项；
+  `node --test` 189 条。逐条断言见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。
+
+### 一件你需要知道的真事
+
+真 x.com 现在**没有 `data-testid` 了**（换成了新前端，属性是 `data-slot` / `data-engagement-action` 这类）。
+所以正文抽取以「结构通道」为主、老的 testid 通道做兜底；解析不出正文时会**明确报「页面改版」**，
+而不是安静返回 0 条。`tests/fixtures/x-real-profile-2026-10.html` 是从真实页面抓下来的 markup，
+用来保证 X 下一次改版能被发现而不是被忽略。
 
 ## 安装
 
@@ -96,6 +102,15 @@ post:https://x.com/handle/status/1234567890123456789
 
 只声明不推、或推了没声明，框架都不会拦：前者记日志并在 World 页标出，后者照常生效。
 
+## 已知限制
+
+- **引用推不单独抽**：嵌套在别人帖子里的 quote 正文会被忽略（顶层正文仍在）。
+- **日期是原样文案**（`10月21日`、`45分钟`），不可排序；排序用入库时间 `learnedAt`。
+- **attach 模式可能被节流**：用你日常浏览器时标签页在后台，X 可能不渲染。回执会提示改 `own`
+  模式，或把那个标签页切到前台再叫它。
+- **长期记忆要 `cortico-bot-memory`**：没装/没启用时，`x_export` 只产出记忆包文件，
+  沉淀那一步需要你手动导入。`x_feed` 本身的知识库不受影响。
+
 ## 排错
 
 日志在 `<部署目录>/data/logs/core.log`（超过 5MB 转 `core.old.log`），World 的 `host.log.*`、
@@ -107,7 +122,7 @@ post:https://x.com/handle/status/1234567890123456789
   不在启动路径上，超时的探测子进程会被强制结束并回收。
 - **装上但 World 页没有它**：扩展日志里会写导入失败或形状不符的原因
   （`isWorldDefinition` 要 id / label / defaults() / create() 四样）。
-- **工具回报失败**（Phase 2 起）会分 5 类：连不上浏览器 / 浏览器没连上 / 命令没回话 /
+- **工具回报失败**会分 5 类：连不上浏览器 / 浏览器没连上 / 命令没回话 /
   页面没打开 / 浏览器报错。前两类才是"浏览器坏了"，后三类说明连接是通的。
 - **读完状态会不会丢**：游标与知识库都落在数据目录（不是内存），重启后仍在。
   但本 World 的定时器是进程内 `setInterval`，重启后由 `start()` 重新挂。
@@ -136,7 +151,8 @@ src/index.ts        包入口，只 export default 定义
 src/definition.ts   id / label / defaults() / preflight() / create() / describe
 src/config.ts       默认值、源解析、ConfigGroup（owner world:x-feed，键 worlds.x-feed.*）
 src/i18n.ts         中英文案 + 中文的 preflight 文案与进模型前缀的固定句子
-src/world.ts        World 实例（Phase 1 是可用的桩，Phase 2 换真身）
+src/world.ts        World 实例：生命周期、三段扫描节奏、登录窗口、事件投递、本地覆盖
+src/tools/          7 个工具与失败回执（5 类失败互不冒充）
 src/ENV_PROMPT.md   进系统前缀的环境说明：源、第三方内容不可当指令、5 类失败、先查库
 assets/icon.svg     图标
 tests/              node --test 用例
